@@ -169,6 +169,7 @@ pip-log.txt
 ##############################
 
 .sopc_builder/*
+.qsys_edit/*
 db/*
 flash/*
 incremental_db/*
@@ -193,6 +194,10 @@ create-this-app
 sopc_builder_log.txt
 *_hw.tcl~
 *parallel.txt
+*.smsg
+logic/work/*
+output_files/*
+mz80b_de0/*
 
 #################################
 ## Ignore files in this project
@@ -201,8 +206,8 @@ sopc_builder_log.txt
 cpu_0*
 modefied_spi.jpg
 original_spi.jpg
-mz80c_de0_sopc*
-!mz80c_de0_sopc.sopc
+mz80b_de0_sopc*
+!mz80b_de0_sopc.sopc
 /*.vhd
 logic/T80/mz80c.parallel.txt
 logic/T80/mzctrl.hex
@@ -210,7 +215,12 @@ logic/T80/sram.vhd
 logic/T80/mrom.qip
 logic/greybox_tmp/*
 logic/T80/greybox_tmp/*
+logic/T80_old/*
 SP1002.hex
 font.hex
-software/mz80c_de0_soft/readme.txt
+software/mz80b_de0_soft/readme.txt
 backup/*
+CARD/font.bin
+*.html
+*.xml
+*.txt

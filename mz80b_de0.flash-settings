@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?> 
+<java version="1.6.0_23" class="java.beans.XMLDecoder"> 
+ <object class="com.altera.embeddedsw.utilities.bean.PersistModels"> 
+  <void property="filesModels"> 
+   <void method="add"> 
+    <object class="com.altera.embeddedsw.flash.model.internal.FileModel"> 
+     <void property="baseAddress"> 
+      <string>0x400000</string> 
+     </void> 
+     <void property="bootloader"> 
+      <string>C:/altera/13.1/nios2eds/components/altera_nios2/boot_loader_cfi.srec</string> 
+     </void> 
+     <void property="cpuResetAddress"> 
+      <string>0x400000</string> 
+     </void> 
+     <void property="endAddress"> 
+      <string>0x800000</string> 
+     </void> 
+     <void property="extraArgs"> 
+      <string></string> 
+     </void> 
+     <void property="fileType"> 
+      <object class="com.altera.embeddedsw.flash.model.IMemoryFilesModel$FileType" method="valueOf"> 
+       <string>ELF</string> 
+      </object> 
+     </void> 
+     <void property="filename"> 
+      <string>D:\develop\mz80b_de0\software\mz80b_de0_soft\mz80b_de0_soft.elf</string> 
+     </void> 
+     <void property="memoryName"> 
+      <string>CFI</string> 
+     </void> 
+    </object> 
+   </void> 
+  </void> 
+  <void id="LinkedHashMap0" property="map"> 
+   <void method="put"> 
+    <string>VERSION</string> 
+    <string>13.1</string> 
+   </void> 
+   <void method="put"> 
+    <string>BUILD</string> 
+    <string>182</string> 
+   </void> 
+   <void method="put"> 
+    <string>sopcinfoFile</string> 
+    <string>D:\develop\mz80b_de0\mz80b_de0.sopcinfo</string> 
+   </void> 
+   <void method="put"> 
+    <string>physicalCpuName</string> 
+    <string>NiosII</string> 
+   </void> 
+   <void method="put"> 
+    <string>generateFiles</string> 
+    <string>true</string> 
+   </void> 
+   <void method="put"> 
+    <string>programFlash</string> 
+    <string>true</string> 
+   </void> 
+   <void method="put"> 
+    <string>flashFilesDir</string> 
+    <string>D:\develop\mz80b_de0\flash</string> 
+   </void> 
+   <void method="put"> 
+    <string>scriptDir</string> 
+    <string>D:\develop\mz80b_de0\script</string> 
+   </void> 
+   <void method="put"> 
+    <string>eraseAllEnabled</string> 
+    <string>false</string> 
+   </void> 
+   <void method="put"> 
+    <string>runFromResetEnabled</string> 
+    <string>false</string> 
+   </void> 
+   <void method="put"> 
+    <string>acceptBadSysId</string> 
+    <string>false</string> 
+   </void> 
+   <void method="put"> 
+    <string>acceptBadTimestamp</string> 
+    <string>false</string> 
+   </void> 
+   <void method="put"> 
+    <string>processorCableName</string> 
+    <string>USB-Blaster on localhost [USB-0]</string> 
+   </void> 
+   <void method="put"> 
+    <string>processorDeviceIndex</string> 
+    <string>1</string> 
+   </void> 
+   <void method="put"> 
+    <string>processorInstanceId</string> 
+    <string>0</string> 
+   </void> 
+   <void method="put"> 
+    <string>userQpfFile</string> 
+    <string>D:\develop\mz80b_de0\mz80b.qpf</string> 
+   </void> 
+  </void> 
+  <void property="map"> 
+   <object idref="LinkedHashMap0"/> 
+  </void> 
+ </object> 
+</java> 
