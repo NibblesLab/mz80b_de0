@@ -224,3 +224,4 @@ CARD/font.bin
 *.html
 *.xml
 *.txt
+!CARD/mz80b_j.txt
