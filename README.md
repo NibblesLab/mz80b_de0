@@ -25,6 +25,7 @@ How to reproduction project
     * mz80b.sdc
     * mz80b.qpf
     * mz80b\_de0.qsys
+    * new.tcl
 * Start Quartus II.
 * Open project. File->Open Project...->mz80b_de0.qpf
 * Start Qsys. Tools->Qsys
@@ -41,6 +42,17 @@ How to reproduction project
     * CPU name:->NiosII
     * Project name:->mz80b\_de0\_soft
     * Project template->Hello World
+* Start BSP editor to edit current BSP. NiosII->BSP Editor...
+* Select new BSP. File->New BSP... , set parameters and push OK button.
+    * SOPC Information File name:->mz80b\_de0.sopcinfo
+    * CPU name:->NiosII
+    * Operating system:->Altera HAL
+    * Version:->default
+    * Check off "Use default locations"
+    * BSP target directory:-> mz80b\_de0\_soft\_bsp
+    * Check on "Ebable Additional Tcl script"
+    * Additional Tcl script:->new.tcl
+* Push Generate button and exit to push Exit button.
 * Put these files in zip(software/mz80b\_de0\_soft/*) to software/mz80b\_de0\_soft folder.
     * diskio.c
     * diskio.h
