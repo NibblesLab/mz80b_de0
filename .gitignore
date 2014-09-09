@@ -225,3 +225,4 @@ CARD/font.bin
 *.xml
 *.txt
 !CARD/mz80b_j.txt
+!CARD/system.ini
