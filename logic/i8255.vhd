@@ -42,6 +42,12 @@ end i8255;
 architecture Behavioral of i8255 is
 
 --
+-- Port Register
+--
+signal PAi : std_logic_vector(7 downto 0);
+--signal PBi : std_logic_vector(7 downto 0);
+signal PCi : std_logic_vector(7 downto 0);
+--
 -- Port Selecter
 --
 signal SELPA : std_logic;
@@ -67,46 +73,52 @@ begin
 	-- Output
 	--
 	process( RST, CLK, MZMODE ) begin
-		if( RST='0' ) then
+		if RST='0' then
 			if MZMODE='0' then
-				PA<=X"10";
+				PAi<=X"10";
 			else
-				PA<=X"FF";
+				PAi<=X"FF";
 			end if;
---			PB<=(others=>'0');
-			PC<=X"58";
-		elsif( CLK'event and CLK='0' ) then
-			if( CS='0' and WR='0' ) then
-				if( SELPA='1' ) then
-					PA<=DI;
+--			PBi<=(others=>'0');
+			PCi<=X"58";
+		elsif CLK'event and CLK='0' then
+			if CS='0' and WR='0' then
+				if SELPA='1' then
+					PAi<=DI;
 				end if;
---				if( SELPB='1' ) then
---					PB<=DI;
+--				if SELPB='1' then
+--					PBi<=DI;
 --				end if;
-				if( SELPC='1' ) then
-					PC<=DI;
+				if SELPC='1' then
+					PCi<=DI;
 				end if;
-				if( SELCT='1' and DI(7)='0' ) then
+				if SELCT='1' and DI(7)='0' then
 					case DI(3 downto 1) is
-						when "000" => PC(0)<=DI(0);
-						when "001" => PC(1)<=DI(0);
-						when "010" => PC(2)<=DI(0);
-						when "011" => PC(3)<=DI(0);
-						when "100" => PC(4)<=DI(0);
-						when "101" => PC(5)<=DI(0);
-						when "110" => PC(6)<=DI(0);
-						when "111" => PC(7)<=DI(0);
-						when others => PC<="XXXXXXXX";
+						when "000" => PCi(0)<=DI(0);
+						when "001" => PCi(1)<=DI(0);
+						when "010" => PCi(2)<=DI(0);
+						when "011" => PCi(3)<=DI(0);
+						when "100" => PCi(4)<=DI(0);
+						when "101" => PCi(5)<=DI(0);
+						when "110" => PCi(6)<=DI(0);
+						when "111" => PCi(7)<=DI(0);
+						when others => PCi<="XXXXXXXX";
 					end case;
 				end if;
 			end if;
 		end if;
 	end process;
 
+	PA<=PAi;
+--	PB<=PBi;
+	PC<=PCi;
+
 	--
 	-- Input select
 	--
-	DO<=PB when RD='0' and CS='0' and SELPB='1' else (others=>'0');
+	DO<=PAi when RD='0' and CS='0' and SELPA='1' else
+		 PB  when RD='0' and CS='0' and SELPB='1' else
+		 PCi when RD='0' and CS='0' and SELPC='1' else (others=>'0');
 
 --	LDDAT<=TBLNK&"0000000";
 
