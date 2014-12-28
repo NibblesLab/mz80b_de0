@@ -6,7 +6,7 @@
 --
 -- Count only mode 2 with Counter read out
 --
--- Nibbles Lab. 2005-2013
+-- Nibbles Lab. 2005-2014
 --
 
 library IEEE;
@@ -42,7 +42,7 @@ signal CREG : std_logic_vector(15 downto 0);
 --
 -- initialize
 --
-signal INIV : std_logic_vector(15 downto 0);
+signal INIV : std_logic_vector(15 downto 0) := (others=>'0');
 signal RL : std_logic_vector(1 downto 0);
 signal PO : std_logic;
 signal WUL : std_logic;
@@ -55,49 +55,44 @@ signal NEWM : std_logic;
 signal CD : std_logic_vector(15 downto 0);
 signal DTEN : std_logic;
 signal CEN : std_logic;
-signal GT : std_logic;
 
 begin
 
 	--
-	-- Counter access mode and latch
-	--
-	process( KCLK, WRM ) begin
-		if( KCLK'event and KCLK='0' and WRM='0' ) then
-			if( DI(5 downto 4)="00" ) then
-				CD<=CREG;
-			else
-				RL<=DI(5 downto 4);
-			end if;
-		end if;
-	end process;
-
-	--
-	-- Counter initialize
+	-- Counter control
 	--
 	process( KCLK ) begin
-		if( KCLK'event and KCLK='0' ) then
-			if( WRM='0' and DI(5 downto 4)/="00") then
-				NEWM<='1';
-				WUL<='0';
-				WULi<='0';
-			elsif( WRD='0' ) then
-				if( RL="01" ) then
-					INIV(7 downto 0)<=DI;
-					NEWM<='0';
-				elsif( RL="10" ) then
-					INIV(15 downto 8)<=DI;
-					NEWM<='0';
-				elsif( RL="11" ) then
-					if( WUL='0' ) then
-						INIV(7 downto 0)<=DI;
-						WULi<='1';
-					else
-						INIV(15 downto 8)<=DI;
-						WULi<='0';
-						NEWM<='0';
-					end if;
+		if KCLK'event and KCLK='0' then
+			if WRM='0' then
+				if DI(5 downto 4)="00" then
+					CD<=CREG;
+				else
+					RL<=DI(5 downto 4);
+					NEWM<='1';
+					WUL<='0';
+					WULi<='0';
 				end if;
+			end if;
+			if WRD='0' then
+				case RL is
+					when "01" =>
+						INIV(7 downto 0)<=DI;
+						NEWM<='0';
+					when "10" =>
+						INIV(15 downto 8)<=DI;
+						NEWM<='0';
+					when "11" =>
+						if WUL='0' then
+							INIV(7 downto 0)<=DI;
+							WULi<='1';
+						else
+							INIV(15 downto 8)<=DI;
+							WULi<='0';
+							NEWM<='0';
+						end if;
+					when others =>
+						NEWM<='0';
+				end case;
 			end if;
 			WUL<=WULi;
 		end if;
@@ -107,15 +102,15 @@ begin
 	-- Read control
 	--
 	process( RD, WRM, DI(5 downto 4) ) begin
-		if( WRM='0' ) then
-			if( DI(5 downto 4)="00" ) then
+		if WRM='0' then
+			if DI(5 downto 4)="00" then
 				DTEN<='1';
 			else
 				RUL<='0';
 			end if;
-		elsif( RD'event and RD='1' ) then
+		elsif RD'event and RD='1' then
 			RUL<=not RUL;
-			if( DTEN='1' and RUL='1' ) then
+			if DTEN='1' and RUL='1' then
 				DTEN<='0';
 			end if;
 		end if;
@@ -134,19 +129,22 @@ begin
 	--
 	-- Count (mode 2)
 	--
-	process( CLK ) begin
-		if( CLK'event and CLK='0' ) then
-			GT<=GATE;
-			if( WRM='0' ) then
+	process( CLK, GATE, INIV ) begin
+		if GATE='0' then
+			CREG<=INIV;
+			PO<='1';
+		elsif CLK'event and CLK='0' then
+			if WRM='0' then
 				PO<='1';
-			elsif( (GT='0' and GATE='1') or CREG=1 ) then
-				CREG<=INIV;
-				PO<='1';
-			elsif( CREG=2 ) then
+			elsif CREG="0000000000000010" then
 				PO<='0';
-				CREG<=CREG-1;
-			elsif( CEN='1' ) then
-				CREG<=CREG-1;
+			else
+				PO<='1';
+			end if;
+			if CREG="0000000000000001" then
+				CREG<=INIV;
+			elsif CEN='1' then
+				CREG<=CREG-'1';
 			end if;
 		end if;
 	end process;
