@@ -22,8 +22,8 @@
 extern volatile z80_t z80_sts;
 
 // Menu members
-static char main_menu_item[]="    VIEW    \0 SET MEDIA >\0 REL MEDIA >\0 DIR. LOAD >\0 SET ROMS  >\0 REL ROMS  >\0CARD CHANGE ";
-static unsigned int main_menu_next[7]={0,1,2,99,3,4,0};
+static char main_menu_item[]="    VIEW    \0 SET MEDIA >\0 REL MEDIA >\0 DIR. LOAD >\0 SET ROMS  >\0 REL ROMS  >\0  UPDATE   >\0CARD CHANGE ";
+static unsigned int main_menu_next[8]={0,1,2,99,3,4,5,0};
 
 static char rel_media_item[]="    TAPE    \0    FDD 1   \0    FDD 2   ";
 static unsigned int rel_media_next[6]={0,0,0,0,0,0};
@@ -37,16 +37,20 @@ static unsigned int set_rom_next[8]={99,99,99,99,99,99,99,99};
 static char rel_rom_item[]="  CG ROM    \0  KEYMAP    ";
 static unsigned int rel_rom_next[8]={0,0,0,0,0,0,0,0};
 
-menu_t menus[5]={{main_menu_item,main_menu_next,7},
+static char config_item[]="   LOGIC   >\0    FIRM   >";
+static unsigned int config_next[2]={99,99};
+
+menu_t menus[6]={{main_menu_item,main_menu_next,8},
 				 {set_media_item,set_media_next,3},
 				 {rel_media_item,rel_media_next,3},
-				 {set_rom_item,set_rom_next,2      },
-				 {rel_rom_item,rel_rom_next,2      }};
+				 {set_rom_item,  set_rom_next,  2},
+				 {rel_rom_item,  rel_rom_next,  2},
+				 {config_item,   config_next,  2}};
 
 //extern FATFS fs;
 extern DIR dirs;
 extern FILINFO finfo;
-extern char fname[13],tname[13];	//,dname1[13],dname2[13];
+extern char fname[13],tname[13],dname[2][13];
 
 /*
  * Display Frame by Item numbers
@@ -267,7 +271,7 @@ int file_menu(unsigned int level, unsigned int select)
 					MZ_disp(level*13+13,num+2,0x04);
 					num++;
 				}else{
-					if((num+offset)<total){
+					if((num+offset)<(total-1)){
 						offset++;
 						disp_files(level,&items[offset*13],total);
 					}
@@ -373,8 +377,8 @@ int view_inventory(void)
 	MZ_msg(14, 1, "MZ-80B on FPGA B.U.System");
 	MZ_msg(14, 2, " BY NibblesLab VER."); MZ_msg(33, 2, version);
 	MZ_msg(14, 4, "    TAPE    :"); MZ_msg(27, 4, tname);
-	MZ_msg(14, 5, "    FDD 1   :"); //MZ_msg(27, 5, dname1);
-	MZ_msg(14, 6, "    FDD 2   :"); //MZ_msg(27, 6, dname2);
+	MZ_msg(14, 5, "    FDD 1   :"); MZ_msg(27, 5, dname[0]);
+	MZ_msg(14, 6, "    FDD 2   :"); MZ_msg(27, 6, dname[1]);
 	MZ_msg(14, 11, "   CG ROM   :"); MZ_msgx(27, 11, romdata->char80b_name, 12);
 	MZ_msg(14, 12, "  KEY MAP   :"); MZ_msgx(27, 12, romdata->key80b_name, 12);
 
