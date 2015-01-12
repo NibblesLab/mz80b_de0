@@ -13,6 +13,8 @@
 #include "altera_avalon_pio_regs.h"
 #include "sys/alt_irq.h"
 #include "mzctrl.h"
+#include "ff.h"
+#include "file.h"
 
 unsigned char buvram[2000];
 
@@ -47,6 +49,12 @@ static void int_service(void* context)
 		IOWR_8DIRECT(REG_BASE, MZ_SYS_IREQ, I_CMT);	// IRQ Clear
 	}
 
+	// FDD Head stepping
+	if((IORD_8DIRECT(REG_BASE, MZ_SYS_IREQ)&I_FDD)==I_FDD){
+		head_step();
+		IOWR_8DIRECT(REG_BASE, MZ_SYS_IREQ, I_FDD);	// IRQ Clear
+	}
+
 	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(INTC_BASE, 0);
 	IOWR_ALTERA_AVALON_PIO_IRQ_MASK(INTC_BASE, 0xf);
 }
@@ -60,7 +68,7 @@ void int_regist(void)
 	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(INTC_BASE, 0);
 	IOWR_ALTERA_AVALON_PIO_IRQ_MASK(INTC_BASE,0xf);
 	IOWR_8DIRECT(REG_BASE, MZ_SYS_IREQ, 0xff);	// IRQ Clear
-	IOWR_8DIRECT(REG_BASE, MZ_SYS_IENB, I_CMT+I_KBD+I_FBTN);	// IRQ Enable
+	IOWR_8DIRECT(REG_BASE, MZ_SYS_IENB, I_CMT+I_KBD+I_FBTN+I_FDD);	// IRQ Enable
 }
 
 /*
@@ -176,6 +184,18 @@ void MZ_msgx(unsigned int x, unsigned int y, char *msg, unsigned int num)
 			x=0;
 		}
 		msg++;
+	}
+}
+
+/*
+ * Clear Screen
+ */
+void MZ_cls(void)
+{
+	unsigned int i;
+
+	for(i=0;i<4000;i++){
+		IOWR_8DIRECT(REG_BASE, MZ_VRAM+i, 0);
 	}
 }
 

@@ -130,6 +130,14 @@ signal URST : std_logic;
 signal MRST : std_logic;
 signal ARST : std_logic;
 --
+-- FD Buffer
+--
+signal BCS_x : std_logic;								-- RAM Request
+signal BADR : std_logic_vector(22 downto 0);		-- RAM Address
+signal BWR_x : std_logic;				 				-- RAM Write Signal
+signal BDI : std_logic_vector(7 downto 0);		-- Data Bus Input from RAM
+signal BDO : std_logic_vector(7 downto 0);		-- Data Bus Output to RAM
+--
 -- GRAM
 --
 signal GADR : std_logic_vector(20 downto 0);
@@ -192,6 +200,12 @@ component mz80b_core
 		GBE_x			: out std_logic_vector(3 downto 0);		-- GRAM Byte Enable
 		GDI			: in std_logic_vector(31 downto 0);		-- Data Bus Input from GRAM
 		GDO			: out std_logic_vector(31 downto 0);	-- Data Bus Output to GRAM
+		-- FD Buffer RAM I/F
+		BCS_x 		: out std_logic;								-- RAM Request
+		BADR 		 	: out std_logic_vector(22 downto 0);	-- RAM Address
+		BWR_x 		: out std_logic;				 				-- RAM Write Signal
+		BDI			: in std_logic_vector(7 downto 0);		-- Data Bus Input from RAM
+		BDO			: out std_logic_vector(7 downto 0);		-- Data Bus Output to RAM
 		-- Resets
 		URST_x		: out std_logic;							-- Universal Reset
 		MRST_x		: in std_logic;							-- Reset after SDRAM init.
@@ -289,20 +303,20 @@ component sdram
 		WEB			: in std_logic;								-- Write Enable
 		BEB			: in std_logic_vector(3 downto 0);		-- Byte Enable
 		WQB			: out std_logic;								-- CPU Wait
-		-- RAM access(port-C:Z80 bus peripheral)
+		-- RAM access(port-C:Reserve)
 		AC				: in std_logic_vector(21 downto 0);		-- Address
 		DCI			: in std_logic_vector(15 downto 0);		-- Data Input(16bit)
 		DCO			: out std_logic_vector(15 downto 0);	-- Data Output(16bit)
 		CSC			: in std_logic;								-- Chip Select
 		WEC			: in std_logic;								-- Write Enable
 		BEC			: in std_logic_vector(1 downto 0);		-- Byte Enable
-		-- RAM access(port-D:Avalon bus bridge snoop)
-		AD				: in std_logic_vector(21 downto 0);		-- Address
-		DDI			: in std_logic_vector(15 downto 0);		-- Data Input(16bit)
-		DDO			: out std_logic_vector(15 downto 0);	-- Data Output(16bit)
+		-- RAM access(port-D:FD Buffer Access port)
+		AD				: in std_logic_vector(22 downto 0);		-- Address
+		DDI			: in std_logic_vector(7 downto 0);		-- Data Input(16bit)
+		DDO			: out std_logic_vector(7 downto 0);		-- Data Output(16bit)
 		CSD			: in std_logic;								-- Chip Select
 		WED			: in std_logic;								-- Write Enable
-		BED			: in std_logic_vector(1 downto 0);		-- Byte Enable
+		--BED			: in std_logic_vector(1 downto 0);		-- Byte Enable
 		-- RAM access(port-E:Graphics Video Memory)
 		AE				: in std_logic_vector(20 downto 0);		-- Address
 		DEI			: in std_logic_vector(31 downto 0);		-- Data Input(32bit)
@@ -357,6 +371,12 @@ begin
 		GBE_x => GBE_x,						-- GRAM Byte Enable
 		GDI => GDI,								-- Data Bus Input from GRAM
 		GDO => GDO,								-- Data Bus Output to GRAM
+		-- FD Buffer RAM I/F
+		BCS_x => BCS_x,						-- RAM Request
+		BADR => BADR,							-- RAM Address
+		BWR_x => BWR_x,		 				-- RAM Write Signal
+		BDI => BDI,								-- Data Bus Input from RAM
+		BDO => BDO,								-- Data Bus Output to RAM
 		-- Resets
 		URST_x => URST,						-- Universal Reset
 		MRST_x => MRST,						-- All Reset
@@ -450,20 +470,20 @@ begin
 		WEB => MWE_x,							-- Write Enable
 		BEB => MBEN_x,							-- Byte Enable
 		WQB => MWRQ_x,							-- CPU Wait
-		-- RAM access(port-C:Z80 I/O Bus)
+		-- RAM access(port-C:Reserve)
 		AC => (others=>'1'),					-- Address
 		DCI => (others=>'0'),				-- Data Input(16bit)
 		DCO => open,							-- Data Output(16bit)
 		CSC => '1',								-- Chip Select
 		WEC => '1',								-- Write Enable
 		BEC => "11",							-- Byte Enable
-		-- RAM access(port-D:MZ Peripheral Buffer)
-		AD => (others=>'1'),					-- Address
-		DDI => (others=>'0'),				-- Data Input(16bit)
-		DDO => open,							-- Data Output(16bit)
-		CSD => '1',								-- Chip Select
-		WED => '1',								-- Write Enable
-		BED => "11",							-- Byte Enable
+		-- RAM access(port-D:FD Buffer)
+		AD => BADR,								-- Address
+		DDI => BDO,								-- Data Input(16bit)
+		DDO => BDI,								-- Data Output(16bit)
+		CSD => BCS_x,							-- Chip Select
+		WED => BWR_x,							-- Write Enable
+		--BED => "00",							-- Byte Enable
 		-- RAM access(port-E:Graphics Video Memory)
 		AE => GADR,								-- Address
 		DEI => GDO,								-- Data Input(32bit)

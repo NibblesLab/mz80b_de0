@@ -16,7 +16,9 @@ typedef struct {
 	char key80b_name[13];
 } ROMS_t;
 
-#define version "0.2"
+#define version "0.3"
+#define MZ80B_FDD1(i) ((unsigned char*)(0xe00000))[i]
+#define MZ80B_FDD2(i) ((unsigned char*)(0xe80000))[i]
 #define MZ80B_MEM(i) ((unsigned char*)(0xfe0000))[i]
 #define MZ80B_GRAM(i) ((unsigned char*)(0xfd0000))[i]
 

@@ -33,20 +33,20 @@ entity sdram is
 		WEB			: in std_logic;								-- Write Enable
 		BEB			: in std_logic_vector(3 downto 0);		-- Byte Enable
 		WQB			: out std_logic;								-- CPU Wait
-		-- RAM access(port-C:Z80 bus peripheral)
+		-- RAM access(port-C:Reserve)
 		AC				: in std_logic_vector(21 downto 0);		-- Address
 		DCI			: in std_logic_vector(15 downto 0);		-- Data Input(16bit)
 		DCO			: out std_logic_vector(15 downto 0);	-- Data Output(16bit)
 		CSC			: in std_logic;								-- Chip Select
 		WEC			: in std_logic;								-- Write Enable
 		BEC			: in std_logic_vector(1 downto 0);		-- Byte Enable
-		-- RAM access(port-D:Avalon bus bridge snoop)
-		AD				: in std_logic_vector(21 downto 0);		-- Address
-		DDI			: in std_logic_vector(15 downto 0);		-- Data Input(16bit)
-		DDO			: out std_logic_vector(15 downto 0);	-- Data Output(16bit)
+		-- RAM access(port-D:FD Buffer Access port)
+		AD				: in std_logic_vector(22 downto 0);		-- Address
+		DDI			: in std_logic_vector(7 downto 0);		-- Data Input(16bit)
+		DDO			: out std_logic_vector(7 downto 0);	-- Data Output(16bit)
 		CSD			: in std_logic;								-- Chip Select
 		WED			: in std_logic;								-- Write Enable
-		BED			: in std_logic_vector(1 downto 0);		-- Byte Enable
+		--BED			: in std_logic_vector(1 downto 0);		-- Byte Enable
 		-- RAM access(port-E:Graphics Video Memory)
 		AE				: in std_logic_vector(20 downto 0);		-- Address
 		DEI			: in std_logic_vector(31 downto 0);		-- Data Input(32bit)
@@ -76,13 +76,16 @@ architecture rtl of sdram is
 
 signal A : std_logic_vector(21 downto 0);
 signal RA : std_logic_vector(21 downto 0);
+signal RD : std_logic_vector(21 downto 0);
 --signal DI : std_logic_vector(15 downto 0);
 signal WCNT : std_logic_vector(2 downto 0);
 signal CNT200 : std_logic;
 signal CNT3 : std_logic_vector(2 downto 0);
 --signal BUF    : std_logic_vector(7 downto 0);
 signal CSMA   : std_logic;			-- Masked
+signal CSMD   : std_logic;			-- Masked
 signal PGAi   : std_logic;			-- Purge Flag
+signal PGDi   : std_logic;			-- Purge Flag
 signal CSAi   : std_logic;
 signal CSAii  : std_logic_vector(3 downto 0);
 signal CSBi   : std_logic;
@@ -91,6 +94,7 @@ signal CSCi   : std_logic;
 signal CSCii  : std_logic_vector(3 downto 0);
 signal CSDi   : std_logic;
 signal CSDii  : std_logic_vector(3 downto 0);
+signal CSDiii : std_logic_vector(3 downto 0);
 signal CSEi   : std_logic;
 signal CSEii  : std_logic_vector(3 downto 0);
 signal REFCNT : std_logic_vector(10 downto 0);
@@ -105,9 +109,9 @@ signal DAOR : std_logic_vector(15 downto 0);
 signal DBIR : std_logic_vector(31 downto 0);
 signal DCIR : std_logic_vector(15 downto 0);
 signal DDIR : std_logic_vector(15 downto 0);
+signal DDOR : std_logic_vector(15 downto 0);
 signal DEIR : std_logic_vector(31 downto 0);
 signal WAITB : std_logic;
---signal WAITD : std_logic;
 signal RDEN : std_logic;
 signal WREN : std_logic;
 signal UBEN : std_logic;
@@ -242,18 +246,20 @@ begin
 				CSCi<='1';
 				DCIR<=DCI;
 			end if;
-			CSDii<=CSDii(2 downto 0)&CSD;
---			if CSDii="1110" then
---				WAITD<='0';
---			end if;
+			CSDii<=CSDii(2 downto 0)&CSMD;
 			if CSDii(1 downto 0)="10" then
 				CSDi<='1';
-				DDIR<=DDI;
+				DDIR(15 downto 8)<=DDI;
 			end if;
 			CSEii<=CSEii(2 downto 0)&CSE;
 			if CSEii(1 downto 0)="10" then
 				CSEi<='1';
 				DEIR<=DEI;
+			end if;
+
+			CSDiii<=CSDiii(2 downto 0)&CSD;
+			if CSDiii(1 downto 0)="10" and AD(0)='0' then
+				DDIR(7 downto 0)<=DDI;
 			end if;
 
 			--
@@ -284,6 +290,14 @@ begin
 					LBEN2<=BEE(2);
 					UBEN<=BEE(1);
 					LBEN<=BEE(0);
+				elsif CSDi='1' and PA='0' and PB='0' and PC='0' and PE='0' then
+					PD<='1';
+					RDEN<=WED;
+					WREN<=not WED;
+					UBEN<='0';
+					LBEN<='0';
+					UBEN2<='1';
+					LBEN2<='1';
 				elsif CSBi='1' and PA='0' and PC='0' and PD='0' and PE='0' then
 					PB<='1';
 					RDEN<=WEB;
@@ -292,14 +306,6 @@ begin
 					LBEN2<=BEB(2);
 					UBEN<=BEB(1);
 					LBEN<=BEB(0);
-				elsif CSDi='1' and PA='0' and PB='0' and PC='0' and PE='0' then
-					PD<='1';
-					RDEN<=WED;
-					WREN<=not WED;
-					UBEN<=BED(1);
-					LBEN<=BED(0);
-					UBEN2<='1';
-					LBEN2<='1';
 				else
 					PA<='0'; PB<='0'; PC<='0'; PD<='0'; PE<='0';
 					RDEN<='0';
@@ -332,7 +338,6 @@ begin
 					RDEN<='0';
 					WREN<='0';
 					CSDi<='0';
---					WAITD<='1';
 				end if;
 			end if;
 			if CUR=RDLY4 or CUR=WPRE then
@@ -364,7 +369,9 @@ begin
 				elsif PC='1' then
 					DCO<=MDI;
 				elsif PD='1' then
-					DDO<=MDI;
+					DDOR<=MDI;
+					RD<=A;
+					PGDi<='1';
 				elsif PE='1' then
 					DEO(15 downto 0)<=MDI;
 				end if;
@@ -413,7 +420,6 @@ begin
 	-- Wait Control for NiosII
 	--
 	WQB<=CSB or WAITB;
---	WQD<=CSD or WAITD;
 
 	--
 	-- Wait after Reset
@@ -570,126 +576,131 @@ begin
 	--
 	-- Command operation
 	--
-	process( CUR, LBEN, UBEN, A, LBEN2, UBEN2 ) begin
+	-- MA(11 downto 0)
+	process( CUR, A ) begin
 		case CUR is
 			when IMODE =>		-- Mode Register Setting
-				MCS<='0';
-				MRAS<='0';
-				MCAS<='0';
-				MWE<='0';
 				MA<="0010" & "0" & "011" & "0" & "000";	-- w-single,CL=3,WT=0(seq),BL=1
 				--MA<="0010" & "0" & "010" & "0" & "000";	-- w-single,CL=2,WT=0(seq),BL=1
 				--MA<="0010" & "0" & "010" & "0" & "001";	-- w-single,CL=2,WT=0(seq),BL=2
-				MDOE<='0';
-				MLDQ<='1';
-				MUDQ<='1';
 			when RACT|WACT =>	-- Read/Write Activate
-				MCS<='0';
-				MRAS<='0';
-				MCAS<='1';
-				MWE<='1';
 				MA<=A(19 downto 8);
-				MDOE<='0';
-				MLDQ<='1';
-				MUDQ<='1';
 			when IPALL =>		-- All Bank Precharge
-				MCS<='0';
-				MRAS<='0';
-				MCAS<='1';
-				MWE<='0';
 				MA<="010000000000";
-				MDOE<='0';
-				MLDQ<='1';
-				MUDQ<='1';
-			when READ =>			-- Read
-				MCS<='0';
-				MRAS<='1';
-				MCAS<='0';
-				MWE<='1';
+			when READ|WRIT =>			-- Read/Write
 				--MA(11 downto 8)<="0100";	-- auto precharge
 				MA(11 downto 8)<="0000";	-- manual precharge
 				MA(7 downto 0)<=A(7 downto 0);
-				MDOE<='0';
-				MLDQ<='1';
-				MUDQ<='1';
-			when READ2 =>			-- Read 2nd word
-				MCS<='0';
-				MRAS<='1';
-				MCAS<='0';
-				MWE<='1';
+			when READ2|WRIT2 =>			-- Read/Write 2nd word
 				--MA(11 downto 8)<="0100";	-- auto precharge
 				MA(11 downto 8)<="0000";	-- manual precharge
 				MA(7 downto 0)<=A(7 downto 1)&'1';
-				MDOE<='0';
+--			when RPRE|WPRE =>			-- Select Bank Precharge
+--				MA<="000000000000";
+			when others =>
+				MA<=(others=>'0');
+		end case;
+	end process;
+	-- LBEN/UBEN
+	process( CUR, LBEN, UBEN, LBEN2, UBEN2 ) begin
+		case CUR is
+			when READ2|RDLY2|WRIT =>	-- Read 2nd word/Read delay 2/Write
 				MLDQ<=LBEN;
 				MUDQ<=UBEN;
-			when RDLY2 =>
-				MCS<='1';
-				MRAS<='1';
-				MCAS<='1';
-				MWE<='1';
-				MA<=(others=>'0');
-				MDOE<='0';
-				MLDQ<=LBEN;
-				MUDQ<=UBEN;
-			when RDLY3 =>
-				MCS<='1';
-				MRAS<='1';
-				MCAS<='1';
-				MWE<='1';
-				MA<=(others=>'0');
-				MDOE<='0';
+			when RDLY3|WRIT2 =>			-- Read delay 3/Write 2nd word
 				MLDQ<=LBEN2;
 				MUDQ<=UBEN2;
+			when others =>
+				MLDQ<='1';
+				MUDQ<='1';
+		end case;
+	end process;
+	-- MDOE
+	process( CUR ) begin
+		case CUR is
 			when WRIT =>			-- Write
-				MCS<='0';
-				MRAS<='1';
-				MCAS<='0';
-				MWE<='0';
-				--MA(11 downto 8)<="0100";	-- auto precharge
-				MA(11 downto 8)<="0000";	-- manual precharge
-				MA(7 downto 0)<=A(7 downto 0);
-				MLDQ<=LBEN;
-				MUDQ<=UBEN;
 				MDOE<='1';
 			when WRIT2 =>			-- Write 2nd word
-				MCS<='0';
-				MRAS<='1';
-				MCAS<='0';
-				MWE<='0';
-				--MA(11 downto 8)<="0100";	-- auto precharge
-				MA(11 downto 8)<="0000";	-- manual precharge
-				MA(7 downto 0)<=A(7 downto 1)&'1';
-				MLDQ<=LBEN2;
-				MUDQ<=UBEN2;
 				MDOE<='1';
+			when others =>
+				MDOE<='0';
+		end case;
+	end process;
+	-- MWE
+	process( CUR ) begin
+		case CUR is
+			when IMODE =>		-- Mode Register Setting
+				MWE<='0';
+			when IPALL =>		-- All Bank Precharge
+				MWE<='0';
+			when WRIT =>			-- Write
+				MWE<='0';
+			when WRIT2 =>			-- Write 2nd word
+				MWE<='0';
+			when RPRE|WPRE =>			-- Select Bank Precharge
+				MWE<='0';
+			when others =>
+				MWE<='1';
+		end case;
+	end process;
+	-- MCS
+	process( CUR ) begin
+		case CUR is
+			when IMODE =>		-- Mode Register Setting
+				MCS<='0';
+			when RACT|WACT =>	-- Read/Write Activate
+				MCS<='0';
+			when IPALL =>		-- All Bank Precharge
+				MCS<='0';
+			when READ =>			-- Read
+				MCS<='0';
+			when READ2 =>			-- Read 2nd word
+				MCS<='0';
+			when WRIT =>			-- Write
+				MCS<='0';
+			when WRIT2 =>			-- Write 2nd word
+				MCS<='0';
 			when IRFSH|FRFSH =>		-- auto refresh
 				MCS<='0';
-				MRAS<='0';
-				MCAS<='0';
-				MWE<='1';
-				MA<=(others=>'0');
-				MDOE<='0';
-				MLDQ<='1';
-				MUDQ<='1';
 			when RPRE|WPRE =>			-- Select Bank Precharge
 				MCS<='0';
-				MRAS<='0';
-				MCAS<='1';
-				MWE<='0';
-				MA<="000000000000";
-				MDOE<='0';
-				MLDQ<='1';
-				MUDQ<='1';
 			when others =>
 				MCS<='1';
+		end case;
+	end process;
+	-- MRAS/MCAS
+	process( CUR ) begin
+		case CUR is
+			when IMODE =>		-- Mode Register Setting
+				MRAS<='0';
+				MCAS<='0';
+			when RACT|WACT =>	-- Read/Write Activate
+				MRAS<='0';
+				MCAS<='1';
+			when IPALL =>		-- All Bank Precharge
+				MRAS<='0';
+				MCAS<='1';
+			when READ =>			-- Read
+				MRAS<='1';
+				MCAS<='0';
+			when READ2 =>			-- Read 2nd word
+				MRAS<='1';
+				MCAS<='0';
+			when WRIT =>			-- Write
+				MRAS<='1';
+				MCAS<='0';
+			when WRIT2 =>			-- Write 2nd word
+				MRAS<='1';
+				MCAS<='0';
+			when IRFSH|FRFSH =>		-- auto refresh
+				MRAS<='0';
+				MCAS<='0';
+			when RPRE|WPRE =>			-- Select Bank Precharge
+				MRAS<='0';
+				MCAS<='1';
+			when others =>
 				MRAS<='1';
 				MCAS<='1';
-				MWE<='1';
-				MA<=(others=>'0');
-				MLDQ<='1';
-				MUDQ<='1';
-				MDOE<='0';
 		end case;
 	end process;
 
@@ -719,10 +730,12 @@ begin
 	A <=AA(22 downto 1) when PA='1' else
 		 AB&'0'			  when PB='1' else
 		 AC				  when PC='1' else
-		 AD				  when PD='1' else
+		 AD(22 downto 1) when PD='1' else
 		 AE&'0'			  when PE='1' else (others=>'0');
 	DAO<=DAOR(15 downto 8) when AA(0)='1' else DAOR(7 downto 0);
 	CSMA<=(CSA or WEA) when RA=AA(22 downto 1) and PGAi='1' else CSA;
+	DDO<=DDOR(15 downto 8) when AD(0)='1' else DDOR(7 downto 0);
+	CSMD<=CSD when (AD(0)='0' and WED='1') or (AD(0)='1' and WED='0') else '1';
 --	process(RA, AA(22 downto 1), PGAi, CSA, WEA) begin
 --		if RA=AA(22 downto 1) then
 --			if PGAi='0' then

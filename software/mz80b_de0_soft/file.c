@@ -24,11 +24,24 @@ FATFS fs;
 DIR dirs;
 FIL tobj;
 FILINFO finfo;
-char fname[13],tname[13],dname1[13],dname2[13];
+char fname[13];
+//
+// Variable for CMT
+char tname[13];
 DWORD t_bpos[10];		// block positions of every blocks
 int t_bnum;			// exist blocks in tape file
 int t_block;		// current block number
 DWORD tremain;		// current block remaining size
+//
+// Variable for FDD
+char dname[2][13];
+TCHAR dpath[2][256];
+int d_tnum[2];			// Current Track number
+int d_size[2];			// Image file size
+int d_mode[2];			// Image file format 0:D88 1:DSK 2:Plain_2D
+int d_sectors[2];		// Number of sectors in Plain format
+int d_length[2];		// Sector length in Plain format
+int track_offset[2][204];	// Track-Info table in DSK-format
 DWORD ql_pt;
 extern volatile z80_t z80_sts;
 
@@ -53,7 +66,63 @@ UINT file_bulk_read(char *fname, unsigned char *buf, UINT size)
 	res=f_open(&fobj, fname, FA_OPEN_EXISTING | FA_READ);
 	if(res!=FR_OK) return(0);
 	res=f_read(&fobj, buf, size, &r);
+	res=f_close(&fobj);
 	return(r);
+}
+
+/*
+ * Read File (bulk) with Progress Bar
+ */
+UINT file_bulk_read_progress(char *fname, unsigned char *buf, UINT size)
+{
+	FIL fobj;
+	FRESULT res;
+	UINT i,r,bsize,rr=0;
+
+	// File Read
+	res=f_open(&fobj, fname, FA_OPEN_EXISTING | FA_READ);
+	if(res!=FR_OK) return(0);
+	for(i=0;i<40;i++) MZ_disp(i, 24, 0x1f);
+	if(size>fobj.fsize) size=fobj.fsize;
+	bsize=size/40;
+	for(i=0;i<39;i++){
+		res=f_read(&fobj, buf, bsize, &r);
+		rr+=r;
+		buf+=bsize;
+		MZ_disp(i, 24, 0x1e);
+	}
+	res=f_read(&fobj, buf, bsize+bsize, &r);
+	rr+=r;
+	MZ_disp(39, 24, 0x1e);
+	res=f_close(&fobj);
+	return(rr);
+}
+
+/*
+ * Write File (bulk) with Progress Bar
+ */
+UINT file_bulk_write_progress(char *fname, unsigned char *buf, UINT size)
+{
+	FIL fobj;
+	FRESULT res;
+	UINT i,r,bsize,rr=0;
+
+	// File Read
+	res=f_open(&fobj, fname, FA_CREATE_ALWAYS | FA_WRITE);
+	if(res!=FR_OK) return(0);
+	for(i=0;i<40;i++) MZ_disp(i, 24, 0x1f);
+	bsize=size/40;
+	for(i=0;i<39;i++){
+		res=f_write(&fobj, buf, bsize, &r);
+		rr+=r;
+		buf+=bsize;
+		MZ_disp(i, 24, 0x1e);
+	}
+	if(rr<size) res=f_write(&fobj, buf, size-rr, &r);
+	rr+=r;
+	MZ_disp(39, 24, 0x1e);
+	res=f_close(&fobj);
+	return(rr);
 }
 
 /*
@@ -61,21 +130,22 @@ UINT file_bulk_read(char *fname, unsigned char *buf, UINT size)
  */
 void direct_load(void)
 {
-	UINT i,r,size,dtadr;
+	UINT i,size,dtadr;
 	unsigned char buf[65536];
 
 	// File Read
-	r=file_bulk_read((TCHAR *)fname, buf, 65536);
+	if(file_bulk_read((TCHAR *)fname, buf, 65536)){
+		for(i=0;i<128;i++){	// Information
+			MZ80B_MEM(0x1140+i)=buf[i];
+		}
+		size=(buf[0x13]<<8)+buf[0x12];
+		dtadr=(buf[0x15]<<8)+buf[0x14];
+		for(i=0;i<size;i++){	// Body
+			MZ80B_MEM(dtadr+i)=buf[128+i];
+		}
+		MZ80B_MEM(0x1155)=0xc3;
+	}
 
-	for(i=0;i<128;i++){	// Information
-		MZ80B_MEM(0x1140+i)=buf[i];
-	}
-	size=(buf[0x13]<<8)+buf[0x12];
-	dtadr=(buf[0x15]<<8)+buf[0x14];
-	for(i=0;i<size;i++){	// Body
-		MZ80B_MEM(dtadr+i)=buf[128+i];
-	}
-	MZ80B_MEM(0x1155)=0xc3;
 }
 
 /*
@@ -84,10 +154,9 @@ void direct_load(void)
 void set_rom(int select){
 	alt_flash_fd *fd;
 	ROMS_t romdata;
-	int i;
+	int i,nums;
 	unsigned char *buf;
 	char *name;
-	UINT r;
 
 	for(i=0;i<sizeof(ROMS_t);i++)
 		((char *)&romdata)[i]=((char *)(CFI_BASE+0x100000))[i];
@@ -96,24 +165,27 @@ void set_rom(int select){
 	case 40:
 		buf=romdata.char80b;
 		name=romdata.char80b_name;
+		nums=2048;
 		break;
 	case 41:
 		buf=romdata.key80b;
 		name=romdata.key80b_name;
+		nums=256;
 		break;
 	default:
 		break;
 	}
 
 	// File Read
-	r=file_bulk_read((TCHAR *)fname, buf, 4096);
-	strcpy(name, "            ");
-	strcpy(name, fname);
+	if(file_bulk_read((TCHAR *)fname, buf, nums)){
+		strcpy(name, "            ");
+		strcpy(name, fname);
 
-	fd=alt_flash_open_dev(CFI_NAME);
-	if(fd)
-		alt_write_flash(fd, 0x100000, (char *)&romdata, sizeof(ROMS_t));
-	alt_flash_close_dev(fd);
+		fd=alt_flash_open_dev(CFI_NAME);
+		if(fd)
+			alt_write_flash(fd, 0x100000, (char *)&romdata, sizeof(ROMS_t));
+		alt_flash_close_dev(fd);
+	}
 }
 
 void clear_rom(int select){
@@ -317,7 +389,7 @@ void tape_rdinf_bulk(unsigned char *buf)
 
 	res=f_read(&tobj, buf, 128, &r);
 	if(t_bnum==t_block){
-		size=(*(buf+0x13))<<8+*(buf+0x12)+128;
+		size=((*(buf+0x13))<<8)+*(buf+0x12)+128;
 		if(t_bpos[t_block]+size<=tobj.fsize){
 			t_bpos[t_block+1]=t_bpos[t_block]+size;
 			t_bnum=t_block+1;
@@ -515,7 +587,6 @@ void apss_f(void)
 void apss_r(void)
 {
 	int i;
-	unsigned char buf[128];
 	FRESULT res;
 
 	if(t_block==0 && tremain==0){		// Tape Top?
@@ -537,6 +608,339 @@ void apss_r(void)
 				if((IORD_8DIRECT(REG_BASE, MZ_CMT_STATUS)&C_REW)==0) return;
 			}
 		}
+	}
+}
+
+/*
+ * Track pointer setting (after seek)
+ */
+void track_setting(int drive, int track)
+{
+	HEADER_D88_t *d88_fdd;
+	HEADER_DSK_DI_t *dsk_fdd;
+	HEADER_DSK_TI_t *dsk_trk;
+	int sector,head,i,offset,s,l,reg,den,tracksize,sectorsize,gap3,gap4;
+
+	if(drive!=0 && drive!=1) return;
+	if(dname[drive][0]=='\0') return;
+	reg=(drive==0?MZ_FD0_REGS:MZ_FD1_REGS);
+
+	switch(d_mode[drive]){
+	case F_D88:
+		d88_fdd=(HEADER_D88_t *)(drive==0?&MZ80B_FDD1(0):&MZ80B_FDD2(0));
+		for(head=0;head<2;head++){
+			IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_HSEL, head);
+			offset=d88_fdd->t_track[track*2+head];
+			// Sector Numbers
+			s=*((unsigned char *)d88_fdd+offset+4);
+			if(s>16) sector=16; else sector=s;
+			IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_MAXS, sector-1);
+			// Top Offset for track
+			IOWR_32DIRECT(REG_BASE, reg+MZ_FDD_TADR, offset+(unsigned int)d88_fdd+16);
+			// Logical Sector Number and Sector size
+			tracksize=0; den=0x40;
+			for(i=0;i<sector;i++){
+				den&=*((unsigned char *)d88_fdd+offset+6);		// sector density
+				s=(*((unsigned char *)d88_fdd+offset+3))&0x3;	// size in ID
+				switch(s){
+				case D_S1K:
+					l=1024;
+					break;
+				case D_S512:
+					l=512;
+					break;
+				case D_S256:
+					l=256;
+					break;
+				default:
+					l=128;
+					break;
+				}
+				s+=((*((unsigned char *)d88_fdd+offset+2))<<2);	// number in ID
+				s+=((*((unsigned char *)d88_fdd+offset+1))<<7);	// head in ID
+				IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_LSEL, i);
+				IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_ID, s);
+				offset+=(l+16);
+				tracksize+=(22+22+18+l);
+			}
+			// Density
+			IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_DDEN, (den==0x40?0:D_DDEN));
+			// GAP3/GAP4 length
+			if(den==0x40){	// FM
+				gap3=(3125-(16+tracksize+94))/sector;
+				gap4=3125-16-tracksize-gap3*sector;
+			}else{			// MFM
+				gap3=(6250-(32+tracksize+208))/sector;
+				gap4=6250-32-tracksize-gap3*sector;
+			}
+			IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_G3, gap3);
+			IOWR_16DIRECT(REG_BASE, reg+MZ_FDD_G4, gap4);
+		}
+		break;
+	case F_DSK:
+		dsk_fdd=(HEADER_DSK_DI_t *)(drive==0?&MZ80B_FDD1(0):&MZ80B_FDD2(0));
+		for(head=0;head<2;head++){
+			IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_HSEL, head);
+			dsk_trk=(HEADER_DSK_TI_t *)((unsigned char *)dsk_fdd+track_offset[drive][track*2+head]);
+			// Sector Numbers
+			s=dsk_trk->SPT;
+			if(s>16) sector=16; else sector=s;
+			IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_MAXS, sector-1);
+			// Top Offset for track
+			IOWR_32DIRECT(REG_BASE, reg+MZ_FDD_TADR, (unsigned int)dsk_trk+256);
+			// Logical Sector Number and Sector size
+			tracksize=0; sectorsize=128;
+			for(i=0;i<sector;i++){
+				s=dsk_trk->s_info[i].BPS&0x3;	// size in ID
+				s+=(dsk_trk->s_info[i].sector)<<2;	// number in ID
+				s+=(dsk_trk->s_info[i].head)<<7;	// head in ID
+				l=dsk_trk->s_info[i].length;
+				if(l>128) sectorsize=l;
+				IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_LSEL, i);
+				IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_ID, s);
+				tracksize+=(22+22+18+l);
+			}
+			// Density
+			if(sectorsize==128){
+				IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_DDEN, 0);
+			}else{
+				IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_DDEN, D_DDEN);
+			}
+			// GAP3/GAP4 length
+			if(sectorsize==128){	// FM
+				gap3=(3125-(16+tracksize+94))/sector;
+				gap4=3125-16-tracksize-gap3*sector;
+			}else{					// MFM
+				gap3=(6250-(32+tracksize+208))/sector;
+				gap4=6250-32-tracksize-gap3*sector;
+			}
+			IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_G3, gap3);
+			IOWR_16DIRECT(REG_BASE, reg+MZ_FDD_G4, gap4);
+		}
+		break;
+	case F_2D:
+		for(head=0;head<2;head++){
+			IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_HSEL, head);
+			// Density
+			IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_DDEN, D_DDEN);
+			// Top Offset for track
+			IOWR_32DIRECT(REG_BASE, reg+MZ_FDD_TADR, (drive==0?(unsigned int)&MZ80B_FDD1(0):(unsigned int)&MZ80B_FDD2(0))+(track*2+head)*d_sectors[drive]*d_length[drive]);
+			// Sector Numbers
+			IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_MAXS, d_sectors[drive]-1);
+			// Logical Sector Number
+			for(i=0;i<d_sectors[drive];i++){
+				if(d_length[drive]==1024){
+					s=D_S1K;
+				}else if(d_length[drive]==512){
+					s=D_S512;
+				}else {
+					s=D_S256;
+				}
+				s+=(i+1)<<2;
+				s+=head<<7;
+				IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_LSEL, i);
+				IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_ID, s);
+			}
+			// GAP3/GAP4 length
+			if(d_length[drive]==1024){
+				IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_G3, 116);
+				IOWR_16DIRECT(REG_BASE, reg+MZ_FDD_G4, 208);
+			}else if(d_length[drive]==512){
+				IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_G3, 84);
+				IOWR_16DIRECT(REG_BASE, reg+MZ_FDD_G4, 296);
+			}else {
+				IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_G3, 54);
+				IOWR_16DIRECT(REG_BASE, reg+MZ_FDD_G4, 266);
+			}
+		}
+		break;
+	default:
+		break;
+	}
+
+	IOWR_8DIRECT(REG_BASE, reg+MZ_FDD_TRK, track);
+	return;
+}
+
+/*
+ * mount Floppy Image File
+ */
+void fd_mount(int select)
+{
+	int k,s,i,j,offset,flags=D_DISK;
+	HEADER_D88_t *d88_fdd;
+	HEADER_DSK_DI_t *dsk_fdd;
+	HEADER_DSK_TI_t *dsk_trk;
+
+	// Convert menu-number to drive-number
+	s=select-11;
+	if(s!=0 && s!=1) return;
+
+	// Set Image Format number
+	for(k=0;k<13;){
+		if(fname[k++]=='.') break;
+	}
+	if(fname[k]=='D' && fname[k+1]=='8' && fname[k+2]=='8'){
+		d_mode[s]=F_D88;
+	}else if(fname[k]=='D' && fname[k+1]=='S' && fname[k+2]=='K'){
+		d_mode[s]=F_DSK;
+	}else if(fname[k]=='2' && fname[k+1]=='D' && (fname[k+2]=='\0'||fname[k+2]==' ')){
+		d_mode[s]=F_2D;
+	}else{
+		d_mode[s]=0;
+	}
+
+	// Mount start
+	strcpy(dname[s], fname);
+	f_getcwd(dpath[s], sizeof(dpath[s]));
+	d_size[s]=file_bulk_read_progress((TCHAR *)fname, (s==0?&MZ80B_FDD1(0):&MZ80B_FDD2(0)), 512*1024);
+	switch(d_mode[s]){
+	case F_D88:
+		d88_fdd=(HEADER_D88_t *)(s==0?&MZ80B_FDD1(0):&MZ80B_FDD2(0));
+		flags+=D_D88;
+		if(d88_fdd->wp_flag==0x10) flags+=D_WP;
+		break;
+	case F_DSK:
+		dsk_fdd=(HEADER_DSK_DI_t *)(s==0?&MZ80B_FDD1(0):&MZ80B_FDD2(0));
+		offset=256;	// Disk-Info
+		for(i=0;i<(dsk_fdd->tracks*dsk_fdd->heads);i++){
+			if(dsk_fdd->track_size[i]!=0){
+				track_offset[s][i]=offset;
+				dsk_trk=(HEADER_DSK_TI_t *)((unsigned char *)dsk_fdd+offset);
+				for(j=0;j<dsk_trk->SPT;j++){
+					offset+=dsk_trk->s_info[j].length;
+				}
+				offset+=256;
+			}else{
+				track_offset[s][i]=0;
+			}
+		}
+		break;
+	case F_2D:
+		if(d_size[s]>=409600){
+			d_sectors[s]=5;
+			d_length[s]=1024;	//D_S1K;
+		}else if(d_size[s]>=368640){
+			d_sectors[s]=9;
+			d_length[s]=512;	//D_S512;
+		}else{
+			d_sectors[s]=16;
+			d_length[s]=256;	//D_S256;
+		}
+		break;
+	default:
+		break;
+	}
+	IOWR_8DIRECT(REG_BASE, (s==0?MZ_FD0_REGS:MZ_FD1_REGS)+MZ_FDD_CTRL, flags);
+	track_setting(s, d_tnum[s]);
+}
+
+/*
+ * unmount Floppy Image File
+ */
+void fd_unmount(int select)
+{
+	int s,size;
+	TCHAR tmppath[256];
+
+	// Convert menu-number to drive-number
+	s=select-21;
+	if(s!=0 && s!=1) return;
+
+	if((IORD_8DIRECT(REG_BASE, (s==0?MZ_FD0_REGS:MZ_FD1_REGS)+MZ_FDD_CTRL)&D_MF)==D_MF){
+		f_getcwd(tmppath, sizeof(tmppath));
+		f_chdir(dpath[s]);
+		size=file_bulk_write_progress((TCHAR *)"TEMP.$$$", (s==0?&MZ80B_FDD1(0):&MZ80B_FDD2(0)), d_size[s]);
+		if(size==d_size[s]){	// success to write
+			f_unlink(dname[s]);
+			f_rename((TCHAR *)"TEMP.$$$", dname[s]);
+		}
+		f_chdir(tmppath);
+	}
+
+	dname[s][0]='\0';
+	d_size[s]=0;
+	IOWR_8DIRECT(REG_BASE, (s==0?MZ_FD0_REGS:MZ_FD1_REGS)+MZ_FDD_CTRL, 0);
+}
+
+/*
+ * Read 1 record for Pseudo IPL
+ */
+int read_1sector(int drive, int record, unsigned char *buf, unsigned int *track)
+{
+	HEADER_D88_t *d88_fdd;
+	HEADER_DSK_TI_t *dsk_trk;
+	int i,offset,length;
+	unsigned char sector,spt;
+
+	if(drive!=0 && drive!=1) return -1;
+	if(dname[drive][0]=='\0') return -1;
+
+	sector=record&0xf;
+	record>>=4;
+	*track=record^1;
+	switch(d_mode[drive]){
+	case F_D88:
+		d88_fdd=(HEADER_D88_t *)(drive==0?&MZ80B_FDD1(0):&MZ80B_FDD2(0));
+		offset=d88_fdd->t_track[*track];
+		spt=(*((unsigned char *)d88_fdd+offset+4))+((*((unsigned char *)d88_fdd+offset+5))<<8);
+		for(i=0;i<spt;i++){
+			length=(*((unsigned char *)d88_fdd+offset+14))+((*((unsigned char *)d88_fdd+offset+15))<<8);
+			if((*((unsigned char *)d88_fdd+offset+2))==(sector+1)) break;
+			offset+=(length+16);
+		}
+		if((*((unsigned char *)d88_fdd+offset+6))!=0) return -1;	// single density disk
+		offset+=16;
+		break;
+	case F_DSK:
+		dsk_trk=(HEADER_DSK_TI_t *)((drive==0?&MZ80B_FDD1(0):&MZ80B_FDD2(0))+track_offset[drive][*track]);
+		offset=256;
+		for(i=0;i<dsk_trk->SPT;i++){
+			length=dsk_trk->s_info[i].length;
+			if(dsk_trk->s_info[i].sector==(sector+1)) break;
+			offset+=length;
+		}
+		if(length<256) return -1;	// single density disk
+		offset+=track_offset[drive][*track];
+		break;
+	case F_2D:
+		offset=((*track)*d_sectors[drive]+sector)*d_length[drive];
+		length=d_length[drive];
+		break;
+	default:
+		break;
+	}
+	for(i=0;i<length;i++){
+		*(buf++)=~(*((unsigned char *)(drive==0?&MZ80B_FDD1(0):&MZ80B_FDD2(0))+(offset++)));
+	}
+
+	return length;
+}
+
+/*
+ * ISR for Head Step
+ */
+void head_step(void)
+{
+
+	if((IORD_8DIRECT(REG_BASE, MZ_FD0_REGS+MZ_FDD_STEP)&D_STEP)==D_STEP){
+		if((IORD_8DIRECT(REG_BASE, MZ_FD0_REGS+MZ_FDD_STEP)&D_DIRC)==D_DIRC){
+			if(d_tnum[0]>0) d_tnum[0]--;
+		}else{
+			if(d_tnum[0]<41) d_tnum[0]++;
+		}
+		track_setting(0, d_tnum[0]);
+		IOWR_8DIRECT(REG_BASE, MZ_FD0_REGS+MZ_FDD_STEP, D_STEP);	// Flag Clear
+	}
+
+	if((IORD_8DIRECT(REG_BASE, MZ_FD1_REGS+MZ_FDD_STEP)&D_STEP)==D_STEP){
+		if((IORD_8DIRECT(REG_BASE, MZ_FD1_REGS+MZ_FDD_STEP)&D_DIRC)==D_DIRC){
+			if(d_tnum[1]>0) d_tnum[1]--;
+		}else{
+			if(d_tnum[1]<41) d_tnum[1]++;
+		}
+		track_setting(1, d_tnum[1]);
+		IOWR_8DIRECT(REG_BASE, MZ_FD1_REGS+MZ_FDD_STEP, D_STEP);	// Flag Clear
 	}
 }
 

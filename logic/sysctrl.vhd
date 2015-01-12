@@ -31,6 +31,7 @@ entity sysctrl is
 		-- Interrupt
 		INTL	 : out std_logic;								-- Interrupt Signal Output
 		I_CMT	 : in std_logic;								-- from CMT
+		I_FDD	 : in std_logic;								-- from FD unit
 		-- Others
 		URST_x : out std_logic;								-- Universal Reset
 		MRST_x : in std_logic;								-- Reset after SDRAM init.
@@ -40,6 +41,7 @@ entity sysctrl is
 		SCLK	 : in std_logic;								-- 31.25kHz
 		ZBREQ	 : out std_logic;								-- Z80 Bus Request
 		ZBACK	 : in std_logic;								-- Z80 Bus Acknowridge
+		BST_x	 : in std_logic;								-- BOOT start request from Z80
 		BOOTM	 : out std_logic;								-- BOOT mode
 		F_BTN	 : out std_logic								-- Function Button
   );
@@ -70,6 +72,9 @@ signal IFBBUF : std_logic_vector(2 downto 0);
 signal IRQ_CT : std_logic;
 signal IE_CT : std_logic;
 signal ICTBUF : std_logic_vector(2 downto 0);
+signal IRQ_FD : std_logic;
+signal IE_FD : std_logic;
+signal IFDBUF : std_logic_vector(2 downto 0);
 --
 -- Control for Z80
 --
@@ -86,9 +91,15 @@ begin
 			IRQ_KB<='0';
 			IRQ_FB<='0';
 			IRQ_CT<='0';
+			IRQ_FD<='0';
+			IKBBUF<=(others=>'0');
+			IFBBUF<=(others=>'0');
+			ICTBUF<=(others=>'0');
+			IFDBUF<=(others=>'0');
 			IE_KB<='0';
 			IE_FB<='0';
 			IE_CT<='0';
+			IE_FD<='0';
 			ZBREQ<='1';
 			BOOTMi<='1';
 			ZRSTi<='0';
@@ -106,17 +117,23 @@ begin
 			if ICTBUF(2 downto 1)="01" then
 				IRQ_CT<=IE_CT;
 			end if;
+			IFDBUF<=IFDBUF(1 downto 0)&I_FDD;
+			if IFDBUF(2 downto 1)="01" then
+				IRQ_FD<=IE_FD;
+			end if;
 			-- Register
 			if RCS_x='0' and RWE_x='0' then
 				if RADR=X"0005" then	-- MZ_SYS_IREQ
-					IRQ_KB<=IRQ_KB and (not RDI(0));
-					IRQ_FB<=IRQ_FB and (not RDI(1));
-					IRQ_CT<=IRQ_CT and (not RDI(2));
+					IRQ_KB<=IRQ_KB and (not RDI(0));	-- I_KBD 0x01
+					IRQ_FB<=IRQ_FB and (not RDI(1));	-- I_FBTN 0x02
+					IRQ_CT<=IRQ_CT and (not RDI(2));	-- I_CMT 0x04
+					IRQ_FD<=IRQ_FD and (not RDI(3));	-- I_FDD 0x08
 				end if;
 				if RADR=X"0006" then	-- MZ_SYS_IENB
-					IE_KB<=RDI(0);
-					IE_FB<=RDI(1);
-					IE_CT<=RDI(2);
+					IE_KB<=RDI(0);	-- I_KBD 0x01
+					IE_FB<=RDI(1);	-- I_FBTN 0x02
+					IE_CT<=RDI(2);	-- I_CMT 0x04
+					IE_FD<=RDI(3);	-- I_FDD 0x08
 				end if;
 				if RADR=X"0007" then	-- MZ_SYS_CTRL (Control for Z80)
 					ZBREQ<=RDI(0);
@@ -127,16 +144,16 @@ begin
 		end if;
 	end process;
 
-	RDO<="00000"&BUTTON					 when RCS_x='0' and RADR=X"0000" else	-- MZ_SYS_BUTTON
-		  SW(7 downto 0)					 when RCS_x='0' and RADR=X"0002" else	-- MZ_SYS_SW70
-		  "000000"&SW(9)&SW(8)			 when RCS_x='0' and RADR=X"0003" else	-- MZ_SYS_SW98
-		  KBDT								 when RCS_x='0' and RADR=X"0004" else	-- MZ_SYS_KBDT
-		  "00000"&IRQ_CT&IRQ_FB&IRQ_KB when RCS_x='0' and RADR=X"0005" else	-- MZ_SYS_IREQ
-		  "00000"&IE_CT&IE_FB&IE_KB	 when RCS_x='0' and RADR=X"0006" else	-- MZ_SYS_IENB
-		  "0000000"&ZBACK					 when RCS_x='0' and RADR=X"0007" else	-- MZ_SYS_STATUS
+	RDO<="00000"&BUTTON							 when RCS_x='0' and RADR=X"0000" else	-- MZ_SYS_BUTTON
+		  SW(7 downto 0)							 when RCS_x='0' and RADR=X"0002" else	-- MZ_SYS_SW70
+		  "000000"&SW(9)&SW(8)					 when RCS_x='0' and RADR=X"0003" else	-- MZ_SYS_SW98
+		  KBDT										 when RCS_x='0' and RADR=X"0004" else	-- MZ_SYS_KBDT
+		  "0000"&IRQ_FD&IRQ_CT&IRQ_FB&IRQ_KB when RCS_x='0' and RADR=X"0005" else	-- MZ_SYS_IREQ
+		  "0000"&IE_FD&IE_CT&IE_FB&IE_KB		 when RCS_x='0' and RADR=X"0006" else	-- MZ_SYS_IENB
+		  "000000"&(not BST_x)&ZBACK			 when RCS_x='0' and RADR=X"0007" else	-- MZ_SYS_STATUS
 		  "00000000";
 
-	INTL<=IRQ_KB or IRQ_FB or IRQ_CT;
+	INTL<=IRQ_KB or IRQ_FB or IRQ_CT or IRQ_FD;
 
 	--
 	-- Filter and Asynchronous Reset with automatic

@@ -23,10 +23,13 @@
 extern volatile z80_t z80_sts;
 
 // Globals
-extern char fname[13],tname[13];//,dname1[13],dname2[13];
-extern DWORD ql_pt;
+extern char fname[13],tname[13],dname[2][13];
+extern int t_block;				// current block number
+extern int d_tnum[2];			// Current Track number
+//extern DWORD ql_pt;
 unsigned char settape[]={0x72, 0x5a, 0x5a,'\0'};
-unsigned char settape0[]={0x72, 0x5a, '\0'};
+unsigned char setfd1[]={0x72, 0x5a, 0x72, 0x5a, '\0'};
+unsigned char setfd2[]={0x72, 0x5a, 0x72, 0x72, 0x5a, '\0'};
 
 void menu_process(void)
 {
@@ -43,9 +46,9 @@ void menu_process(void)
 			case 3:
 				direct_load();
 				break;
-			case 6:
+			case 7:
 				sd_mount();
-				tname[0]='\0';	// dname1[0]='\0'; dname2[0]='\0';
+				tname[0]='\0'; dname[0][0]='\0'; dname[1][0]='\0';
 				break;
 			case 10:
 				if(tname[0]!='\0'){	// if tape file is not empty
@@ -53,23 +56,17 @@ void menu_process(void)
 				}
 				tape_mount();
 				break;
-//			case 11:
-//				strcpy(dname1, fname);
-//				mount_fdimage(k);
-//				break;
-//			case 12:
-//				strcpy(dname2, fname);
-//				mount_fdimage(k);
-//				break;
+			case 11:
+			case 12:
+				fd_mount(k);
+				break;
 			case 20:
 				tape_unmount();
 				break;
-//			case 21:
-//				dname1[0]='\0';
-//				break;
-//			case 22:
-//				dname2[0]='\0';
-//				break;
+			case 21:
+			case 22:
+				fd_unmount(k);
+				break;
 			case 40:
 			case 41:
 			case 42:
@@ -95,6 +92,8 @@ void menu_process(void)
 				clear_rom(k);
 				if(view_inventory()==999) continue;
 				break;
+			case 60:
+			case 61:
 			default:
 				break;
 		}
@@ -111,14 +110,14 @@ void System_Initialize(void)
 	char SecName[8],buffer[512],data[4096];
 	unsigned char *cgrom,*keymap;
 	int k;
-	UINT i,size,r;
+	UINT i,r;
 	ROMS_t *romdata=(ROMS_t *)(CFI_BASE+0x100000);
 
 	// Interrupt regist
 	int_regist();
 
 	sd_mount();
-	tname[0]='\0';	// dname1[0]='\0'; dname2[0]='\0';
+	tname[0]='\0'; dname[0][0]='\0'; dname[1][0]='\0';
 
 	// Clear VRAM
 	for(i=0;i<1000;i++)
@@ -166,42 +165,57 @@ void System_Initialize(void)
 		}
 	}
 
-	/*
-	 * IPL Emulation
-	 */
-	// Display Message
-	MZ_BOOT(); // Enter Boot Mode
-	MZ_msg(10,0,"Make Ready CMT");
-	fname[0]='\0';
+}
 
-	do{
-		if((get_key()&'C')=='C'){
-			key0(settape);
-			z80_sts.status|=S_FBTN;	// Set Flag
-		}else if((z80_sts.status&S_FBTN)!=S_FBTN){
-			continue;
-		}
-		SaveVRAM();
-		menu_process();
-		z80_sts.status&=~S_FBTN;	// Clear Flag
-		RestoreVRAM();
-	}while(fname[0]=='\0');
+/*
+ * IPL Emulation(CMT only)
+ */
+int IPL_from_tape(void)
+{
+	UINT size;
+	unsigned char k;
+
+	MZ_cls();
+	t_block=0;
+
+	// Select Tape file
+	if(tname[0]=='\0'){
+		MZ_msg(10,0,"Make Ready CMT");
+
+		do{
+			k=get_key();
+			if((k&'C')=='C'){
+				key0(settape);
+				z80_sts.status|=S_FBTN;	// Set Flag
+			}else if(k==0x1b&&!(IORD_8DIRECT(REG_BASE, MZ_SYS_SW70)&0x10)){
+				return -1;
+			}else if((z80_sts.status&S_FBTN)!=S_FBTN){
+				continue;
+			}
+			SaveVRAM();
+			menu_process();
+			z80_sts.status&=~S_FBTN;	// Clear Flag
+			RestoreVRAM();
+		}while(fname[0]=='\0');
+
+		tape_mount();
+	}
 
 	while(1){
 		// File Read
 		MZ_msg(4,0,"IPL is looking for a program");
 		usleep(500000);
-		tape_mount();
 		tape_rdinf_bulk(&MZ80B_MEM(0x4f00));
-		MZ_msg(4,0,"                            ");
+		MZ_cls();
 		MZ_msg(0,0,"IPL is loading ");
 		MZ_msgx(16,0,(char *)&MZ80B_MEM(0x4f01),16);
 		if((MZ80B_MEM(0x4f00))==0x01) break;
-		MZ_msg(0,0,"                               ");
+		MZ_cls();
 		MZ_msg(10,0,"File Mode error");
-		MZ_msg(4,2,"Pressing S key starts the CMT");
 		tape_unmount();
 		fname[0]='\0';
+		if(!(IORD_8DIRECT(REG_BASE, MZ_SYS_SW70)&0x10)) return -1;
+		MZ_msg(4,2,"Pressing S key starts the CMT");
 		while(1){
 			if((get_key()&'S')=='S'){
 				if(fname[0]!='\0') break;
@@ -212,27 +226,125 @@ void System_Initialize(void)
 				RestoreVRAM();
 			}
 		}
-		MZ_msg(4,2,"                             ");
+		MZ_cls();
 	}
 
 	size=(MZ80B_MEM(0x4f13)<<8)+MZ80B_MEM(0x4f12);
 	tape_rddat_bulk(&MZ80B_MEM(0),size);
+	return 0;
+}
+
+/*
+ * IPL Emulation
+ */
+void IPL(void)
+{
+	UINT size,record,i,silent_boot,l_track;
+	int length;
+	unsigned char k;
+
+	// Enter Boot Mode
+	MZ_BOOT();
+	MZ_cls();
+	fname[0]='\0';
+	// disk already exists
+	if(dname[0][0]=='\0')
+		silent_boot=0;
+	else
+		silent_boot=1;
+
+	if(IORD_8DIRECT(REG_BASE, MZ_SYS_SW70)&0x10){
+		IPL_from_tape();
+	} else {
+		// Boot from FD or CMT
+		if(silent_boot==0){
+			MZ_msg(10,0,"Make Ready FD");
+		}
+
+		while(1){
+			if(silent_boot==0){
+				MZ_msg(10,2,"Press F or C");
+				MZ_msg(11,4,"F:Floppy Disk");
+				if(!(IORD_8DIRECT(REG_BASE, MZ_SYS_SW98)&0x2)) MZ_msg(24,4,"ette");
+				MZ_msg(11,5,"C:Cassette Tape");
+			}
+			while(1){
+				if(silent_boot==0){
+					if((z80_sts.status&S_FBTN)==S_FBTN){
+						SaveVRAM();
+						menu_process();
+						z80_sts.status&=~S_FBTN;	// Clear Flag
+						RestoreVRAM();
+					}
+					k=get_key();
+				}else{
+					k='F';
+				}
+				if((k&'C')=='C'){
+					if(IPL_from_tape()==0) return; else break;
+				}
+				if((k&'F')=='F'){
+					if(silent_boot==0){
+						MZ_cls();
+						MZ_msg(10,2,"Drive No? (1-4)");
+						do{ k=get_key(); }while(k<'1' || k>'4');
+						MZ80B_MEM(0x7fec)=k-'1';
+						if((k=='1'&&dname[0][0]=='\0')||(k=='2'&&dname[1][0]=='\0')||k=='3'||k=='4'){
+							MZ_cls();
+							MZ_msg(10,0,"Loading error");
+							break;
+						}
+					}else{
+						k='1';
+					}
+					read_1sector(k-'1', 0, &MZ80B_MEM(0x4f00), &l_track);
+					if(MZ80B_MEM(0x4f00)==0x01&&strncmp((char *)&MZ80B_MEM(0x4f01), "IPLPRO", 6)==0){
+						MZ_cls();
+						MZ_msg(0,0,"IPL is loading ");
+						MZ_msgx(16,0,(char *)&MZ80B_MEM(0x4f07),10);
+						size=(MZ80B_MEM(0x4f15)<<8)+MZ80B_MEM(0x4f14);
+						record=(MZ80B_MEM(0x4f1f)<<8)+MZ80B_MEM(0x4f1e);
+						for(i=0;i<size;i+=length){
+							length=read_1sector(k-'1', record++, &MZ80B_MEM(i), &l_track);
+							if(length<0) break;
+						}
+						if(length>0){
+							d_tnum[k-'1']=l_track/2;
+							track_setting(k-'1', l_track/2);
+							return;
+						}
+					}
+					MZ_cls();
+					MZ_msg(7,0,"This disk is not master");
+					silent_boot=0;
+					break;
+				}
+			}
+		}
+
+	}
 
 }
 
 int main()
 {
-	int i,k;
+	int i,k,ipl_mode=1;
 	//UINT r;
 
 	// Initialize Disk I/F and ROM
 	System_Initialize();
 
-	// Start MZ
-	MZ_release();
-
 	/* Event loop never exits. */
 	while (1){
+		// IPL
+		if(ipl_mode==1){
+			// System Program Load
+			IPL();
+			// Start MZ
+			MZ_release();
+			ipl_mode=0;
+		}
+
 		// CMT Control
 		if((z80_sts.status&S_CMT)==S_CMT){
 			z80_sts.status&=~S_CMT;
@@ -279,6 +391,11 @@ int main()
 			menu_process();
 			MZ_Brelease();
 			z80_sts.status&=~S_FBTN;
+		}
+
+		// BST check
+		if((IORD_8DIRECT(REG_BASE, MZ_SYS_STATUS)&S_BST)==S_BST){
+			ipl_mode=1;
 		}
 
 		// Quick Load/Save

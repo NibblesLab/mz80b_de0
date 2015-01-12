@@ -19,7 +19,7 @@
 ## PROGRAM "Quartus II"
 ## VERSION "Version 13.1.4 Build 182 03/12/2014 SJ Web Edition"
 
-## DATE    "Thu Aug 28 23:25:31 2014"
+## DATE    "Sat Dec 13 16:58:05 2014"
 
 ##
 ## DEVICE  "EP3C16F484C6"
@@ -45,8 +45,8 @@ create_clock -name {mz80b_core:MZ80B|T80se:CPU0|IORQ_n} -period 1000.000 -wavefo
 create_clock -name {mz80b_core:MZ80B|T80se:CPU0|MREQ_n} -period 1000.000 -waveform { 0.000 500.000 } 
 create_clock -name {mz80b_core:MZ80B|T80se:CPU0|RD_n} -period 1000.000 -waveform { 0.000 500.000 } 
 create_clock -name {DRAM_CLK} -period 10.000 -waveform { 0.000 5.000 } [get_pins {DRAM0|RCKGEN0|altpll_component|auto_generated|wire_pll1_clk[0]~clkctrl|outclk}]
+create_clock -name {Z80_CLK} -period 250.000 -waveform { 0.000 125.000 } [get_pins {MZ80B|VIDEO0|VCKGEN|altpll_component|auto_generated|wire_pll1_clk[2]~clkctrl|outclk}]
 
-derive_pll_clocks
 
 #**************************************************************
 # Create Generated Clock
@@ -60,7 +60,6 @@ create_generated_clock -name {MZ80B|VIDEO0|VCKGEN|altpll_component|auto_generate
 create_generated_clock -name {MZ80B|VIDEO0|VCKGEN|altpll_component|auto_generated|pll1|clk[1]} -source [get_pins {MZ80B|VIDEO0|VCKGEN|altpll_component|auto_generated|pll1|inclk[0]}] -duty_cycle 50.000 -multiply_by 8 -divide_by 25 -master_clock {CLOCK_50} [get_pins {MZ80B|VIDEO0|VCKGEN|altpll_component|auto_generated|pll1|clk[1]}] 
 create_generated_clock -name {MZ80B|VIDEO0|VCKGEN|altpll_component|auto_generated|pll1|clk[2]} -source [get_pins {MZ80B|VIDEO0|VCKGEN|altpll_component|auto_generated|pll1|inclk[0]}] -duty_cycle 50.000 -multiply_by 2 -divide_by 25 -master_clock {CLOCK_50} [get_pins {MZ80B|VIDEO0|VCKGEN|altpll_component|auto_generated|pll1|clk[2]}] 
 create_generated_clock -name {MZ80B|VIDEO0|VCKGEN|altpll_component|auto_generated|pll1|clk[3]} -source [get_pins {MZ80B|VIDEO0|VCKGEN|altpll_component|auto_generated|pll1|inclk[0]}] -duty_cycle 50.000 -multiply_by 1 -divide_by 1600 -master_clock {CLOCK_50} [get_pins {MZ80B|VIDEO0|VCKGEN|altpll_component|auto_generated|pll1|clk[3]}] 
-
 
 #**************************************************************
 # Set Clock Latency
@@ -136,6 +135,7 @@ set_clock_groups -asynchronous -group [get_clocks {altera_reserved_tck}]
 set_clock_groups -asynchronous -group [get_clocks {altera_reserved_tck}] 
 set_clock_groups -asynchronous -group [get_clocks {altera_reserved_tck}] 
 set_clock_groups -asynchronous -group [get_clocks {altera_reserved_tck}] 
+set_clock_groups -asynchronous -group [get_clocks {altera_reserved_tck}] 
 set_clock_groups -asynchronous -group [get_clocks {CK4M}] -group [get_clocks {CLOCK_50}] 
 set_clock_groups -asynchronous -group [get_clocks {CK4M}] -group [get_clocks {CLOCK_50_2}] 
 set_clock_groups -asynchronous -group [get_clocks {CK4M}] -group [get_clocks {mz80b_core:MZ80B|T80s:CPU0|IORQ_n}] 
@@ -168,6 +168,24 @@ set_false_path -from [get_registers {*|alt_jtag_atlantic:*|write_stalled}] -to [
 set_false_path -from [get_registers {*|alt_jtag_atlantic:*|write_valid}] 
 set_false_path -to [get_keepers {*altera_std_synchronizer:*|din_s1}]
 set_false_path -to [get_pins -nocase -compatibility_mode {*|alt_rst_sync_uq1|altera_reset_synchronizer_int_chain*|clrn}]
+
+set_false_path -from [get_registers {mz80b_core:MZ80B|mz1e05:FDIF0|HS}] 
+set_false_path -from [get_registers {mz80b_core:MZ80B|mz1e05:FDIF0|DS_x[*]}] 
+set_false_path -from [get_registers {mz80b_core:MZ80B|sysctrl:CTRL0|URSTi}] 
+set_false_path -from [get_registers {mz80b_core:MZ80B|videoout:VIDEO0|BLNK}] -to [get_ports {DRAM_ADDR[*]}]
+set_false_path -from [get_registers {mz80b_core:MZ80B|videoout:VIDEO0|GADRC[*]}] -to [get_ports {DRAM_ADDR[*]}]
+set_false_path -from [get_registers {mz80b_core:MZ80B|z8420:PIO0|AREG[7]}] -to [get_ports {DRAM_ADDR[*]}]
+set_false_path -from [get_registers {mz80b_core:MZ80B|z8420:PIO0|AREG[6]}] -to [get_ports {DRAM_ADDR[*]}]
+set_false_path -from [get_registers {mz80b_core:MZ80B|videoout:VIDEO0|GCSi_x}] -to [get_registers {sdram:DRAM0|CSEii[0]}]
+set_false_path -from [get_registers {mz80b_core:MZ80B|videoout:VIDEO0|BLNK}] -to [get_registers {sdram:DRAM0|LBEN}]
+set_false_path -from [get_registers {mz80b_core:MZ80B|videoout:VIDEO0|BLNK}] -to [get_registers {sdram:DRAM0|UBEN}]
+set_false_path -from [get_registers {mz80b_core:MZ80B|videoout:VIDEO0|BLNK}] -to [get_registers {sdram:DRAM0|LBEN2}]
+set_false_path -from [get_registers {sdram:DRAM0|DEO[*]}] -to [get_registers {mz80b_core:MZ80B|videoout:VIDEO0|SDATR[*]}]
+set_false_path -from [get_registers {sdram:DRAM0|DEO[*]}] -to [get_registers {mz80b_core:MZ80B|videoout:VIDEO0|SDATG[*]}]
+set_false_path -from [get_registers {sdram:DRAM0|DEO[*]}] -to [get_registers {mz80b_core:MZ80B|videoout:VIDEO0|SDATB[*]}]
+set_false_path -from [get_registers {mz80b_core:MZ80B|videoout:VIDEO0|BLNK}] -to [get_registers {sdram:DRAM0|WREN}]
+set_false_path -from [get_registers {mz80b_core:MZ80B|videoout:VIDEO0|BLNK}] -to [get_registers {sdram:DRAM0|RDEN}]
+set_false_path -from [get_registers {mz80b_core:MZ80B|videoout:VIDEO0|BLNK}] -to [get_registers {sdram:DRAM0|CSEii[0]}]
 
 
 #**************************************************************

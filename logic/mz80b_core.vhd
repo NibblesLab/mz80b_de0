@@ -10,8 +10,11 @@
 --
 -- Slave Memory Map (from NiosII)
 --
+-- 0000-000F System Control
+-- 0010-001F CMT
+-- 0040-005F FDD1
+-- 0060-007F FDD2
 -- C000-C0FF Keymap keymatrix.vhd
--- C100-C7FF (blank)
 -- C800-CFFF CG-ROM videoout.vhd
 -- D000-D7FF C-VRAM videoout.vhd
 --
@@ -45,6 +48,12 @@ entity mz80b_core is
 		GBE_x			: out std_logic_vector(3 downto 0);		-- GRAM Byte Enable
 		GDI			: in std_logic_vector(31 downto 0);		-- Data Bus Input from GRAM
 		GDO			: out std_logic_vector(31 downto 0);	-- Data Bus Output to GRAM
+		-- FD Buffer RAM I/F
+		BCS_x 		: out std_logic;								-- RAM Request
+		BADR 		 	: out std_logic_vector(22 downto 0);	-- RAM Address
+		BWR_x 		: out std_logic;				 				-- RAM Write Signal
+		BDI			: in std_logic_vector(7 downto 0);		-- Data Bus Input from RAM
+		BDO			: out std_logic_vector(7 downto 0);		-- Data Bus Output to RAM
 		-- Resets
 		URST_x		: out std_logic;							-- Universal Reset
 		MRST_x		: in std_logic;							-- Reset after SDRAM init.
@@ -135,9 +144,12 @@ signal BOOTM : std_logic;
 signal F_BTN : std_logic;
 signal I_CMT : std_logic;
 signal C_LEDG : std_logic_vector(9 downto 0);
+signal I_FDD : std_logic;
+signal F_LEDG : std_logic_vector(9 downto 0);
 --
 -- Avalon Bus
 --
+signal DO_FDU : std_logic_vector(7 downto 0);
 signal DO_CMT : std_logic_vector(7 downto 0);
 signal DO_CTRL : std_logic_vector(7 downto 0);
 signal DO_VOUT : std_logic_vector(7 downto 0);
@@ -168,6 +180,7 @@ signal DOPPI : std_logic_vector(7 downto 0);
 signal PPIPA : std_logic_vector(7 downto 0);
 signal PPIPB : std_logic_vector(7 downto 0);
 signal PPIPC : std_logic_vector(7 downto 0);
+signal BST_x : std_logic;
 --
 -- PIT
 --
@@ -182,6 +195,22 @@ signal DOPIO : std_logic_vector(7 downto 0);
 signal INT_x : std_logic;
 signal PIOPA : std_logic_vector(7 downto 0);
 signal PIOPB : std_logic_vector(7 downto 0);
+--
+-- FDD,FDC
+--
+signal DOFDC : std_logic_vector(7 downto 0);
+signal DS : std_logic_vector(3 downto 0);
+signal HS : std_logic;
+signal MOTOR_x : std_logic;
+signal INDEX_x : std_logic;
+signal TRACK00_x : std_logic;
+signal WPRT_x : std_logic;
+signal STEP_x : std_logic;
+signal DIREC : std_logic;
+signal FDO : std_logic_vector(7 downto 0);
+signal FDI : std_logic_vector(7 downto 0);
+signal WGATE_x : std_logic;
+signal DTCLK : std_logic;
 --
 -- for Debug
 --
@@ -463,6 +492,7 @@ component sysctrl
 		-- Interrupt
 		INTL	 : out std_logic;								-- Interrupt Signal Output
 		I_CMT	 : in std_logic;								-- from CMT
+		I_FDD	 : in std_logic;								-- from FD unit
 		-- Others
 		URST_x : out std_logic;								-- Universal Reset
 		MRST_x : in std_logic;								-- Reset after SDRAM init.
@@ -472,9 +502,76 @@ component sysctrl
 		SCLK	 : in std_logic;								-- 31.25kHz
 		ZBREQ	 : out std_logic;								-- Z80 Bus Request
 		ZBACK	 : in std_logic;								-- Z80 Bus Acknowridge
+		BST_x	 : in std_logic;								-- BOOT start request from Z80
 		BOOTM	 : out std_logic;								-- BOOT mode
 		F_BTN	 : out std_logic								-- Function Button
   );
+end component;
+
+component mz1e05
+	Port (
+		-- CPU Signals
+		ZRST_x  : in std_logic;
+		ZCLK	  : in std_logic;
+		ZADR	  : in std_logic_vector(7 downto 0);	-- CPU Address Bus(lower)
+		ZRD_x	  : in std_logic;								-- CPU Read Signal
+		ZWR_x	  : in std_logic;								-- CPU Write Signal
+		ZIORQ_x : in std_logic;								-- CPU I/O Request
+		ZDI	  : in std_logic_vector(7 downto 0);	-- CPU Data Bus(in)
+		ZDO	  : out std_logic_vector(7 downto 0);	-- CPU Data Bus(out)
+		SCLK	  : in std_logic;								-- Slow Clock
+		-- FD signals
+		DS_x	  : out std_logic_vector(4 downto 1);	-- Drive Select
+		HS		  : out std_logic;							-- Head Select
+		MOTOR_x : out std_logic;							-- Motor On
+		INDEX_x : in std_logic;								-- Index Hole Detect
+		TRACK00 : in std_logic;								-- Track 0
+		WPRT_x  : in std_logic;								-- Write Protect
+		STEP_x  : out std_logic;							-- Head Step In/Out
+		DIREC	  : out std_logic;							-- Head Step Direction
+		WGATE_x : out std_logic;							-- Write Gate
+		DTCLK	  : in std_logic;								-- Data Clock
+		FDI	  : in std_logic_vector(7 downto 0);	-- Read Data
+		FDO	  : out std_logic_vector(7 downto 0)	-- Write Data
+	);
+end component;
+
+component fdunit
+	Port (
+		-- Avalon Bus
+		RRST_x  : in std_logic;								-- NiosII Reset
+		RCLK	  : in std_logic;								-- NiosII Clock
+		RADR	  : in std_logic_vector(15 downto 0);	-- NiosII Address Bus
+		RCS_x	  : in std_logic;								-- NiosII Read Signal
+		RWE_x	  : in std_logic;								-- NiosII Write Signal
+		RDI	  : in std_logic_vector(7 downto 0);	-- NiosII Data Bus(in)
+		RDO	  : out std_logic_vector(7 downto 0);	-- NiosII Data Bus(out)
+		-- Interrupt
+		INTO	  : out std_logic;							-- Step Pulse interrupt
+		-- FD signals
+		FCLK	  : in std_logic;
+		DS_x	  : in std_logic_vector(4 downto 1);	-- Drive Select
+		HS		  : in std_logic;								-- Head Select
+		MOTOR_x : in std_logic;								-- Motor On
+		INDEX_x : out std_logic;							-- Index Hole Detect
+		TRACK00 : out std_logic;							-- Track 0
+		WPRT_x  : out std_logic;							-- Write Protect
+		STEP_x  : in std_logic;								-- Head Step In/Out
+		DIREC	  : in std_logic;								-- Head Step Direction
+		WG_x	  : in std_logic;								-- Write Gate
+		DTCLK	  : out std_logic;							-- Data Clock
+		FDI	  : in std_logic_vector(7 downto 0);	-- Write Data
+		FDO	  : out std_logic_vector(7 downto 0);	-- Read Data
+		-- LED
+		LEDG	  : out std_logic_vector(9 downto 0);	--	LED Green[9:0]
+		SCLK	  : in std_logic;								-- Slow Clock
+		-- Buffer RAM I/F
+		BCS_x  : out std_logic;								-- RAM Request
+		BADR   : out std_logic_vector(22 downto 0);	-- RAM Address
+		BWR_x  : out std_logic;				 				-- RAM Write Signal
+		BDI	 : in std_logic_vector(7 downto 0);		-- Data Bus Input from RAM
+		BDO	 : out std_logic_vector(7 downto 0)		-- Data Bus Output to RAM
+	);
 end component;
 
 begin
@@ -536,7 +633,7 @@ begin
 --	WRIT_x<=PPIPC(6);
 --	KINH<=PPIPC(5);
 --	L_FR<=PPIPC(5);
---	BST_x<=PPIPC(3);
+	BST_x<=PPIPC(3);
 --	NST<=PPIPC(1);
 
 	CMT0 : cmt port map (
@@ -746,6 +843,7 @@ begin
 		-- Interrupt
 		INTL => INTL,				-- Interrupt Signal Output
 		I_CMT => I_CMT,			-- from CMT
+		I_FDD => I_FDD,			-- from FD unit
 		-- Others
 		URST_x => URST_x,			-- Universal Reset
 		MRST_x => MRST_x,			-- Reset after SDRAM init.
@@ -755,9 +853,72 @@ begin
 		SCLK => CK3125,			-- 31.25kHz
 		ZBREQ => BREQ_x,			-- Z80 Bus Request
 		ZBACK => BAK_x,			-- Z80 Bus Acknowridge
+		BST_x => BST_x,			-- BOOT start request from Z80
 		BOOTM => BOOTM,			-- BOOT mode
 		F_BTN	=> F_BTN				-- Function Button
   );
+
+	FDIF0 : mz1e05 Port map(
+		-- CPU Signals
+		ZRST_x => ZRST,
+		ZCLK => CK4M,
+		ZADR => ZADDR(7 downto 0),		-- CPU Address Bus(lower)
+		ZRD_x => RD_x,						-- CPU Read Signal
+		ZWR_x => WR_x,						-- CPU Write Signal
+		ZIORQ_x => IORQ_x,				-- CPU I/O Request
+		ZDI => ZDTO,						-- CPU Data Bus(in)
+		ZDO => DOFDC,						-- CPU Data Bus(out)
+		SCLK => CK3125,					-- Slow Clock
+		-- FD signals
+		DS_x => DS,							-- Drive Select
+		HS => HS,							-- Head Select
+		MOTOR_x => MOTOR_x,				-- Motor On
+		INDEX_x => INDEX_x,				-- Index Hole Detect
+		TRACK00 => TRACK00_x,			-- Track 0
+		WPRT_x => WPRT_x,					-- Write Protect
+		STEP_x => STEP_x,					-- Head Step In/Out
+		DIREC => DIREC,					-- Head Step Direction
+		WGATE_x => WGATE_x,				-- Write Gate
+		DTCLK => DTCLK,					-- Data Clock
+		FDI => FDI,							-- Read Data
+		FDO => FDO							-- Write Data
+	);
+
+	FDU0 : fdunit Port map(
+		-- Avalon Bus
+		RRST_x => RRST_x,					-- NiosII Reset
+		RCLK => RCLK,						-- NiosII Clock
+		RADR => RADR,						-- NiosII Address Bus
+		RCS_x => RCS_x,					-- NiosII Read Signal
+		RWE_x => RWE_x,					-- NiosII Write Signal
+		RDI => RDI,							-- NiosII Data Bus(in)
+		RDO => DO_FDU,						-- NiosII Data Bus(out)
+		-- Interrupt
+		INTO => I_FDD,						-- Step Pulse interrupt
+		-- FD signals
+		FCLK => CK4M,
+		DS_x => DS,							-- Drive Select
+		HS => HS,							-- Head Select
+		MOTOR_x => MOTOR_x,				-- Motor On
+		INDEX_x => INDEX_x,				-- Index Hole Detect
+		TRACK00 => TRACK00_x,			-- Track 0
+		WPRT_x => WPRT_x,					-- Write Protect
+		STEP_x => STEP_x,					-- Head Step In/Out
+		DIREC => DIREC,					-- Head Step Direction
+		WG_x => WGATE_x,					-- Write Gate
+		DTCLK => DTCLK,					-- Data Clock
+		FDO => FDI,							-- Read Data
+		FDI => FDO,							-- Write Data
+		-- LED
+		LEDG => F_LEDG,					--	LED Green[9:0]
+		SCLK => CK3125,					-- Slow Clock
+		-- Buffer RAM I/F
+		BCS_x => BCS_x,					-- RAM Request
+		BADR => BADR,						-- RAM Address
+		BWR_x => BWR_x,				 	-- RAM Write Signal
+		BDI => BDI,							-- Data Bus Input from RAM
+		BDO => BDO							-- Data Bus Output to RAM
+	);
 
 	--
 	-- Control Signals
@@ -767,7 +928,7 @@ begin
 	--
 	-- Data Bus
 	--
-	ZDTI<=DOPPI or DOPIT or DOPIO or VRAMDO or RAMDI;
+	ZDTI<=DOPPI or DOPIT or DOPIO or VRAMDO or RAMDI or DOFDC;
 	RAMDI<=ZDI when RD_x='0' and MREQ_x='0' and CSV_x='1' and CSG_x='1' else (others=>'0');
 --			  HSKDI when CSHSK='0' else ZDI;
 
@@ -797,7 +958,7 @@ begin
 	--
 	-- Ports
 	--
-	RDO<=DO_CMT or DO_CTRL or DO_VOUT or DO_KMTX;
+	RDO<=DO_CMT or DO_CTRL or DO_VOUT or DO_KMTX or DO_FDU;
 	ZADR<="1111110"&ZADDR;	-- 0x7E0000
 	ZPG_x<=BAK_x and ZRST;
 	ZCS_x<=MREQ_x when CSV_x='1' and CSG_x='1' and RFSH_x='1' else '1';
@@ -813,10 +974,17 @@ begin
 
 	RST8253_x<='0' when ZADDR(7 downto 2)="111100" and IWR='0' else '1';
 
-	GPIO1_D(14)<=PPIPC(2);	-- Sound Output
-	GPIO1_D(15)<=PPIPC(2);
+	GPIO1_D(31 downto 16)<=(others=>'0');
+	GPIO1_D(15)<=PPIPC(2);	-- Sound Output
+	GPIO1_D(14)<=PPIPC(2);
+	GPIO1_D(13 downto 0)<=(others=>'0');
+	GPIO0_CLKOUT<=(others=>'0');
+	GPIO0_D<=(others=>'0');
+	GPIO1_CLKOUT<=(others=>'0');
 
-	LEDG(9 downto 4)<=(others=>'0');
+	LEDG(9 downto 7)<=(others=>'0');
+	LEDG(6 downto 5)<=F_LEDG(6 downto 5);
+	LEDG(4)<='0';
 	LEDG(3)<=C_LEDG(3);
 	LEDG(2)<=PPIPA(5) when MZMODE='0' else '0';	-- SFTLOCK
 	LEDG(1)<=PPIPA(6) when MZMODE='0' else '0';	-- GRAPH
