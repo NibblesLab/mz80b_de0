@@ -220,9 +220,13 @@ SP1002.hex
 font.hex
 software/mz80b_de0_soft/readme.txt
 backup/*
+work/*
 CARD/font.bin
 *.html
 *.xml
 *.txt
+wlf*
+*.wlf
 !CARD/mz80b_j.txt
 !CARD/system.ini
+*.do
