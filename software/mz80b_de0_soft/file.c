@@ -534,11 +534,9 @@ int cmtload(void)
 		if(tape_rddat_spwm()==0){
 			// Wait for APSS
 			while((IORD_8DIRECT(REG_BASE, MZ_CMT_CTRL)&C_MTON)!=0);
-			usleep(600000);
-			if((z80_sts.status&S_CMT)==S_CMT){
-				while((IORD_8DIRECT(REG_BASE, MZ_CMT_CTRL)&C_FF)!=0);
-				z80_sts.status&=~S_CMT;
-			}
+			usleep(2000000);
+			while((IORD_8DIRECT(REG_BASE, MZ_CMT_STATUS)&C_FF)!=0);
+			z80_sts.status&=~S_CMT;
 		}
 	}
 
