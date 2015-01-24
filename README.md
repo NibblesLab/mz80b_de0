@@ -50,9 +50,9 @@ How to reproduction project
     * Version:->default
     * Check off "Use default locations"
     * BSP target directory:-> mz80b\_de0\_soft\_bsp
-    * Check on "Ebable Additional Tcl script"
+    * Check on "Enable Additional Tcl script"
     * Additional Tcl script:->new.tcl
-* Push Generate button and exit to push Exit button.
+* Push Generate button and push Exit button to exit.
 * Put these files in zip(software/mz80b\_de0\_soft/*) to software/mz80b\_de0\_soft folder.
     * diskio.c
     * diskio.h
